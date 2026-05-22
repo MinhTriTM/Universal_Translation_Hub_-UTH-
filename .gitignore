@@ -1,0 +1,67 @@
+# ===== File HTML đã lưu từ trình duyệt =====
+# Các trang Xiaomi MiMo lưu về offline (kèm thư mục _files)
+*.html
+*_files/
+
+# ===== Screenshots =====
+Screenshot*.png
+*.png
+*.jpg
+*.jpeg
+
+# ===== Claude Code =====
+.claude/
+.remember/
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.whl
+
+# ===== Virtual environments =====
+.venv/
+venv/
+env/
+ENV/
+
+# ===== IDE =====
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ===== OS =====
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# ===== Secrets =====
+.env
+.env.local
+.env.*.local
+
+# ===== Demo copied files (từ dự án khác, không cần track) =====
+demo/xiaomi_mimo/
+demo/dichgame/
+demo/manga_translator/
+demo/MANIFEST.md
+
+# ===== Logs =====
+*.log
+logs/
+
+# ===== Temp =====
+*.tmp
+*.bak
+*.bak.*
+*.old
+
+# ===== Docs output (giữ lại docs/ gốc, bỏ qua file tạm) =====
+docs/**/tmp/
