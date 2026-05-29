@@ -1,356 +1,148 @@
 """
-Universal Translation Hub (UTH) — Demo Entry Point
+Universal Translation Hub (UTH) — Entry Point
 Hệ thống dịch thuật phổ quát đa phương tiện
-Powered by Xiaomi MiMo V2.5
+Powered by Xiaomi MiMo V2.5 + Local AI Models
 
 Tác giả: Đoàn Minh Trí — DTHU University
+License: MIT (2026)
 """
 
 import asyncio
 import argparse
 import sys
+import os
 from pathlib import Path
 
-# ===== VERSION =====
-__version__ = "0.1.0-demo"
+# Thêm src vào Python path
+sys.path.insert(0, str(Path(__file__).parent))
+
+from src.providers import get_provider
+from src.memory import TranslationMemory
+from src.pipelines import GamePipeline, MangaPipeline, FilmPipeline
+from src.utils.file_detector import detect_pipeline
+
+__version__ = "0.2.0"
 
 
-# ===== DEMO: MiMo API Client =====
-class MiMoClient:
-    """
-    Client wrapper cho Xiaomi MiMo API.
-    Hỗ trợ: Chat Completion, TTS, Voice Clone.
-    API format: OpenAI-compatible.
-    """
-
-    def __init__(self, api_key: str, base_url: str = "https://api.mimo.xiaomi.com/v1"):
-        self.api_key = api_key
-        self.base_url = base_url
-        self.model_map = {
-            "director": "MiMo-V2.5-Pro",
-            "translator": "MiMo-V2.5",
-            "ocr": "MiMo-V2.5",
-            "qa": "MiMo-V2.5",
-            "tts": "MiMo-V2.5-TTS",
-            "voice_clone": "MiMo-TTS-VoiceClone",
-            "voice_design": "MiMo-TTS-VoiceDesign",
-        }
-
-    async def chat(self, agent_role: str, messages: list, temperature: float = 0.7) -> str:
-        """Gọi MiMo chat completion theo role của agent."""
-        model = self.model_map.get(agent_role, "MiMo-V2.5")
-
-        # Demo mode: simulate API call
-        print(f"  [MiMo API] Gọi model: {model} | Role: {agent_role} | Messages: {len(messages)}")
-
-        # Trong production, thay bằng:
-        # async with httpx.AsyncClient() as client:
-        #     response = await client.post(
-        #         f"{self.base_url}/chat/completions",
-        #         headers={"Authorization": f"Bearer {self.api_key}"},
-        #         json={"model": model, "messages": messages, "temperature": temperature}
-        #     )
-        #     return response.json()["choices"][0]["message"]["content"]
-
-        return f"[DEMO] Bản dịch từ {model}"
-
-
-# ===== BASE AGENT =====
-class BaseAgent:
-    """Agent cơ sở — tất cả agents kế thừa từ đây."""
-
-    def __init__(self, name: str, role: str, mimo_client: MiMoClient):
-        self.name = name
-        self.role = role
-        self.mimo = mimo_client
-
-    async def execute(self, task: dict) -> dict:
-        raise NotImplementedError
-
-
-# ===== DIRECTOR AGENT =====
-class DirectorAgent(BaseAgent):
-    """
-    Director Agent (MiMo-V2.5-Pro)
-    Điều phối toàn bộ hệ thống, chọn pipeline, xử lý lỗi.
-    """
-
-    def __init__(self, mimo: MiMoClient):
-        super().__init__("Director", "director", mimo)
-
-    async def execute(self, task: dict) -> dict:
-        input_path = task.get("input", "")
-        mode = task.get("mode", "auto")
-
-        print(f"\n{'='*60}")
-        print(f"  DIRECTOR AGENT — Phân tích yêu cầu")
-        print(f"{'='*60}")
-        print(f"  Input: {input_path}")
-        print(f"  Mode:  {mode}")
-
-        # Phân loại pipeline
-        if mode == "auto":
-            mode = self._detect_pipeline(input_path)
-
-        print(f"  → Chọn pipeline: {mode.upper()}")
-
-        # Điều phối sub-agents
-        if mode == "game":
-            return await self._run_game_pipeline(task)
-        elif mode == "manga":
-            return await self._run_manga_pipeline(task)
-        elif mode == "film":
-            return await self._run_film_pipeline(task)
-        else:
-            return {"success": False, "error": f"Unknown mode: {mode}"}
-
-    def _detect_pipeline(self, path: str) -> str:
-        """Tự động phát hiện loại nội dung."""
-        p = Path(path) if path else Path(".")
-
-        # Game indicators
-        game_files = [".rpgproject", ".game.ini", "www", "data", "Game.dat"]
-        for indicator in game_files:
-            if list(p.glob(f"**/{indicator}")):
-                return "game"
-
-        # Manga indicators
-        image_exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp"}
-        images = [f for f in p.iterdir() if f.suffix.lower() in image_exts] if p.is_dir() else []
-        if len(images) > 3:
-            return "manga"
-
-        # Film indicators
-        video_exts = {".mkv", ".mp4", ".avi", ".mov"}
-        videos = [f for f in p.iterdir() if f.suffix.lower() in video_exts] if p.is_dir() else []
-        if videos:
-            return "film"
-
-        return "game"  # default
-
-    async def _run_game_pipeline(self, task: dict) -> dict:
-        """Pipeline dịch game."""
-        print(f"\n  --- GAME PIPELINE ---")
-
-        # Step 1: Detect engine
-        engine = "RPG Maker MZ"  # Demo
-        print(f"  [1/5] Detect engine: {engine}")
-
-        # Step 2: Extract text
-        texts = ["你好世界", "欢迎来到游戏", "开始冒险"]  # Demo
-        print(f"  [2/5] Extract text: {len(texts)} dòng")
-
-        # Step 3: Translate
-        translations = []
-        for text in texts:
-            result = await self.mimo.chat("translator", [
-                {"role": "system", "content": "Dịch text game sang tiếng Việt. Giữ nguyên format."},
-                {"role": "user", "content": text}
-            ])
-            translations.append({"original": text, "translated": result})
-        print(f"  [3/5] Translated: {len(translations)} dòng")
-
-        # Step 4: QA
-        print(f"  [4/5] QA check: PASS")
-
-        # Step 5: Inject
-        print(f"  [5/5] Inject translation: DONE")
-
-        return {
-            "success": True,
-            "pipeline": "game",
-            "engine": engine,
-            "translations": translations,
-            "count": len(translations)
-        }
-
-    async def _run_manga_pipeline(self, task: dict) -> dict:
-        """Pipeline dịch manga."""
-        print(f"\n  --- MANGA PIPELINE ---")
-
-        # Step 1: Detect text bubbles
-        bubbles = 5  # Demo
-        print(f"  [1/5] Detect text bubbles: {bubbles} vùng")
-
-        # Step 2: OCR
-        texts = ["こんにちは", "世界へようこそ"]  # Demo
-        print(f"  [2/5] OCR: {len(texts)} text blocks")
-
-        # Step 3: Translate
-        translations = []
-        for text in texts:
-            result = await self.mimo.chat("translator", [
-                {"role": "system", "content": "Dịch manga text sang tiếng Việt."},
-                {"role": "user", "content": text}
-            ])
-            translations.append({"original": text, "translated": result})
-        print(f"  [3/5] Translated: {len(translations)} blocks")
-
-        # Step 4: Inpainting
-        print(f"  [4/5] Inpainting (xóa text gốc): DONE")
-
-        # Step 5: Render
-        print(f"  [5/5] Render text mới: DONE")
-
-        return {
-            "success": True,
-            "pipeline": "manga",
-            "translations": translations,
-            "count": len(translations)
-        }
-
-    async def _run_film_pipeline(self, task: dict) -> dict:
-        """Pipeline dịch film + thuyết minh."""
-        print(f"\n  --- FILM PIPELINE ---")
-
-        # Step 1: OCR subtitle
-        subtitles = ["你好", "欢迎观看"]  # Demo
-        print(f"  [1/5] OCR subtitle: {len(subtitles)} dòng")
-
-        # Step 2: Translate
-        translations = []
-        for text in subtitles:
-            result = await self.mimo.chat("translator", [
-                {"role": "system", "content": "Dịch phụ đề phim sang tiếng Việt."},
-                {"role": "user", "content": text}
-            ])
-            translations.append({"original": text, "translated": result})
-        print(f"  [2/5] Translated: {len(translations)} dòng")
-
-        # Step 3: TTS
-        print(f"  [3/5] TTS (MiMo-V2.5-TTS): Tạo audio tiếng Việt")
-
-        # Step 4: Voice Clone (optional)
-        print(f"  [4/5] Voice Clone: Bỏ qua (demo)")
-
-        # Step 5: Audio Sync
-        print(f"  [5/5] Audio sync + Volume ducking: DONE")
-
-        return {
-            "success": True,
-            "pipeline": "film",
-            "translations": translations,
-            "count": len(translations)
-        }
-
-
-# ===== TRANSLATION MEMORY =====
-class TranslationMemory:
-    """Cache bộ nhớ dịch thuật — tránh dịch lại câu đã dịch."""
-
-    def __init__(self, db_path: str = "translation_memory.db"):
-        self.db_path = db_path
-        self.cache = {}  # In-memory cache cho demo
-
-    def get(self, source_text: str, source_lang: str) -> str | None:
-        key = f"{source_lang}:{source_text}"
-        return self.cache.get(key)
-
-    def put(self, source_text: str, source_lang: str, target_text: str):
-        key = f"{source_lang}:{source_text}"
-        self.cache[key] = target_text
-
-    def stats(self) -> dict:
-        return {"total_entries": len(self.cache)}
-
-
-# ===== MAIN =====
-async def main():
-    parser = argparse.ArgumentParser(
-        description="Universal Translation Hub (UTH) — Dịch thuật AI đa phương tiện",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Ví dụ sử dụng:
-  python main.py --mode game --input "E:\\DichGame\\Sordce_Games\\MyGame"
-  python main.py --mode manga --input "./manga_chapter_01/"
-  python main.py --mode film --input "./movie.mkv" --subtitle "./movie.ass"
-  python main.py --demo
-        """
-    )
-    parser.add_argument("--mode", choices=["game", "manga", "film", "auto"], default="auto",
-                        help="Chọn pipeline: game/manga/film/auto")
-    parser.add_argument("--input", type=str, default="",
-                        help="Đường dẫn file/thư mục đầu vào")
-    parser.add_argument("--subtitle", type=str, default="",
-                        help="Đường dẫn file phụ đề (chỉ cho film mode)")
-    parser.add_argument("--api-key", type=str, default="",
-                        help="MiMo API Key (hoặc set MIMO_API_KEY env)")
-    parser.add_argument("--demo", action="store_true",
-                        help="Chạy demo mode")
-    parser.add_argument("--version", action="version", version=f"UTH v{__version__}")
-
-    args = parser.parse_args()
-
-    # Banner
-    print("""
+# ===== BANNER =====
+BANNER = """
 ╔══════════════════════════════════════════════════════════╗
 ║         Universal Translation Hub (UTH) v{:<14s}║
-║         Powered by Xiaomi MiMo V2.5                     ║
+║         Powered by MiMo V2.5 + Local AI                 ║
 ║         Multi-Agent AI Translation System                ║
 ╚══════════════════════════════════════════════════════════╝
-    """.format(__version__))
+"""
 
-    # Demo mode
-    if args.demo:
-        await run_demo()
-        return
 
-    # Production mode
-    api_key = args.api_key or "YOUR_MIMO_API_KEY"
-    if api_key == "YOUR_MIMO_API_KEY":
-        print("  ⚠️  Chưa cấu hình MiMo API Key!")
-        print("  → Sử dụng --api-key hoặc set MIMO_API_KEY env")
-        print("  → Chạy --demo để xem demo không cần API key\n")
-        await run_demo()
-        return
+async def run_pipeline(args):
+    """Chạy pipeline chính."""
+    provider_name = args.provider
+    provider = get_provider(provider_name)
+    memory = TranslationMemory()
 
-    mimo = MiMoClient(api_key)
-    director = DirectorAgent(mimo)
+    print(f"  Provider: {provider.get_name()}")
+    print(f"  Available: {provider.is_available()}")
 
-    result = await director.execute({
-        "input": args.input,
-        "mode": args.mode,
-        "subtitle": args.subtitle
-    })
+    if not provider.is_available():
+        print(f"\n  ⚠️  Provider '{provider_name}' không sẵn sàng!")
+        if provider_name == "mimo":
+            print("  → Set MIMO_API_KEY trong env hoặc .env file")
+            print("  → Thử: python main.py --provider local")
+        elif provider_name == "local":
+            print("  → Chạy AG-Translator backend: cd E:\\DichGame\\Backend && python server.py")
+            print("  → Thử: python main.py --provider mimo")
+        return None
+
+    mode = args.mode
+    if mode == "auto":
+        mode = detect_pipeline(args.input)
+        print(f"  Auto-detected pipeline: {mode}")
+
+    # Chọn pipeline
+    pipeline_map = {
+        "game": lambda: GamePipeline(provider, memory, backend_url=args.backend),
+        "manga": lambda: MangaPipeline(provider, memory),
+        "film": lambda: FilmPipeline(provider, memory),
+    }
+
+    if mode not in pipeline_map:
+        print(f"  ❌ Pipeline không hỗ trợ: {mode}")
+        return None
+
+    pipeline = pipeline_map[mode]()
+
+    print(f"\n{'='*60}")
+    print(f"  PIPELINE: {mode.upper()}")
+    print(f"  Input: {args.input}")
+    print(f"  Provider: {provider.get_name()}")
+    print(f"{'='*60}\n")
+
+    # Build options
+    options = {
+        "source_lang": args.source_lang,
+        "target_lang": args.target_lang,
+    }
+    if args.subtitle:
+        options["subtitle"] = args.subtitle
+    if args.output:
+        options["output_dir"] = args.output
+    if args.voice:
+        options["voice"] = args.voice
+    if args.engine:
+        options["engine"] = args.engine
+
+    result = await pipeline.execute(args.input, options)
 
     # Report
     print(f"\n{'='*60}")
     print(f"  KẾT QUẢ")
     print(f"{'='*60}")
-    print(f"  Pipeline:   {result.get('pipeline', 'N/A')}")
-    print(f"  Success:    {result.get('success', False)}")
-    print(f"  Translated: {result.get('count', 0)} items")
-    if result.get("translations"):
-        print(f"\n  Bản dịch:")
-        for i, t in enumerate(result["translations"], 1):
-            print(f"    {i}. {t['original']} → {t['translated']}")
-    print(f"{'='*60}")
+    print(result.summary())
+
+    # TM stats
+    stats = memory.stats()
+    if stats.get("total_entries", 0) > 0:
+        print(f"\n  Translation Memory: {stats['total_entries']} entries")
+
+    return result
 
 
 async def run_demo():
     """Chạy demo showcase tất cả 3 pipelines."""
-    print("  🎮 DEMO MODE — Không cần API key\n")
+    print("  🎮 DEMO MODE — Không cần API key hay backend\n")
 
-    mimo = MiMoClient(api_key="demo")
-    director = DirectorAgent(mimo)
+    provider = get_provider("local")
+    memory = TranslationMemory()
 
     # Demo 1: Game
     print("━" * 60)
     print("  DEMO 1: Dịch Game (RPG Maker)")
     print("━" * 60)
-    await director.execute({"input": "./demo_game/", "mode": "game"})
+    game = GamePipeline(provider, memory)
+    print(f"  Pipeline: {game.name}")
+    print(f"  Steps: Detect → Scan → Extract → Translate → Inject → Validate")
+    print(f"  Backend: {game.backend_url}")
+    print(f"  ✅ Game Pipeline sẵn sàng (cần AG-Translator backend để chạy)\n")
 
     # Demo 2: Manga
-    print("\n" + "━" * 60)
-    print("  DEMO 2: Dịch Manga")
     print("━" * 60)
-    await director.execute({"input": "./demo_manga/", "mode": "manga"})
+    print("  DEMO 2: Dịch Manga/Comic")
+    print("━" * 60)
+    manga = MangaPipeline(provider, memory)
+    print(f"  Pipeline: {manga.name}")
+    print(f"  Steps: Scan → OCR → Translate → Inpaint → Render")
+    print(f"  OCR: manga-ocr (Japanese) + MiMo API fallback")
+    print(f"  ✅ Manga Pipeline sẵn sàng\n")
 
     # Demo 3: Film
-    print("\n" + "━" * 60)
+    print("━" * 60)
     print("  DEMO 3: Dịch Film + Thuyết Minh")
     print("━" * 60)
-    await director.execute({"input": "./demo_film/movie.mkv", "mode": "film"})
+    film = FilmPipeline(provider, memory)
+    print(f"  Pipeline: {film.name}")
+    print(f"  Steps: Subtitle → Translate → TTS → Sync")
+    print(f"  TTS: edge-tts (vi-VN-HoaiMyNeural)")
+    print(f"  ✅ Film Pipeline sẵn sàng\n")
 
     # Summary
     print(f"""
@@ -359,15 +151,73 @@ async def run_demo():
 ╠══════════════════════════════════════════════════════════╣
 ║  ✅ Game Pipeline:  12 engines, Smart Auto-Pilot        ║
 ║  ✅ Manga Pipeline: OCR + Inpainting + Render           ║
-║  ✅ Film Pipeline:  STT + TTS + Voice Clone             ║
-║  ✅ 10 AI Agents:   Powered by MiMo V2.5                ║
+║  ✅ Film Pipeline:  Subtitle + TTS + Voice              ║
+║  ✅ Provider:       MiMo API + Local Models             ║
 ║  ✅ Translation Memory: SQLite cache                    ║
 ╠══════════════════════════════════════════════════════════╣
 ║  📖 Docs:  docs/vi/SRS.md, SAD.md, SDP.md              ║
-║  🌐 README: README.vn.md (+ 5 ngôn ngữ)                ║
-║  🔑 API:   MIMO_API_KEY cần thiết cho production        ║
+║  🌐 README: README.md                                   ║
+║  🔑 API:   MIMO_API_KEY hoặc AG-Translator backend      ║
 ╚══════════════════════════════════════════════════════════╝
     """)
+
+
+async def main():
+    parser = argparse.ArgumentParser(
+        description="Universal Translation Hub (UTH) — Dịch thuật AI đa phương tiện",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Ví dụ sử dụng:
+  python main.py --mode game --input "E:\\Games\\MyGame" --provider local
+  python main.py --mode manga --input "./manga_chapter_01/"
+  python main.py --mode film --input "./movie.mkv" --subtitle "./movie.ass"
+  python main.py --demo
+  python main.py --mode auto --input "./any_content/"
+        """
+    )
+    parser.add_argument("--mode", choices=["game", "manga", "film", "auto"], default="auto",
+                        help="Chọn pipeline: game/manga/film/auto (default: auto)")
+    parser.add_argument("--input", type=str, default="",
+                        help="Đường dẫn file/thư mục đầu vào")
+    parser.add_argument("--output", type=str, default="",
+                        help="Thư mục đầu ra (optional)")
+    parser.add_argument("--subtitle", type=str, default="",
+                        help="Đường dẫn file phụ đề (chỉ cho film mode)")
+    parser.add_argument("--provider", choices=["auto", "mimo", "local"], default="auto",
+                        help="Translation provider: auto/mimo/local (default: auto)")
+    parser.add_argument("--engine", type=str, default="",
+                        help="Game engine (auto-detect nếu bỏ qua)")
+    parser.add_argument("--source-lang", type=str, default="auto",
+                        help="Ngôn ngữ nguồn (default: auto)")
+    parser.add_argument("--target-lang", type=str, default="vi",
+                        help="Ngôn ngữ đích (default: vi)")
+    parser.add_argument("--voice", type=str, default="vi-VN-HoaiMyNeural",
+                        help="TTS voice cho film pipeline")
+    parser.add_argument("--backend", type=str, default="http://localhost:5000",
+                        help="AG-Translator backend URL")
+    parser.add_argument("--demo", action="store_true",
+                        help="Chạy demo mode")
+    parser.add_argument("--version", action="version", version=f"UTH v{__version__}")
+
+    args = parser.parse_args()
+
+    print(BANNER.format(__version__))
+
+    if args.demo:
+        await run_demo()
+        return
+
+    if not args.input:
+        parser.print_help()
+        print("\n  ⚠️  Cần --input để chạy pipeline!")
+        print("  → Hoặc dùng --demo để xem demo")
+        return
+
+    if not os.path.exists(args.input):
+        print(f"  ❌ Không tìm thấy: {args.input}")
+        return
+
+    await run_pipeline(args)
 
 
 if __name__ == "__main__":
